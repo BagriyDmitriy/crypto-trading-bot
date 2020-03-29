@@ -1,6 +1,9 @@
 const BinanceClient = require('binance-api-node').default;
 
 const moment = require('moment');
+const request = require('request');
+const querystring = require('querystring');
+const Candlestick = require('./../dict/candlestick')
 const ExchangeCandlestick = require('./../dict/exchange_candlestick');
 const Ticker = require('./../dict/ticker');
 const TickerEvent = require('./../event/ticker_event');
@@ -144,6 +147,42 @@ module.exports = class Binance {
         });
       });
     });
+  }
+
+  backfill(symbol, period, start) {
+    return new Promise((resolve, reject) => {
+      let query = querystring.stringify({
+        'symbol': symbol,
+        'interval': period,
+        'startTime': start.valueOf(),
+        'limit': 500
+      });
+
+      request(this.getBaseUrl() + '/api/v3/klines?' + query, { json: true }, (err, res, body) => {
+        if (err) {
+          console.log('Binance: Candle backfill error: ' + String(err))
+          reject()
+          return
+        }
+
+        if(!Array.isArray(body)) {
+          console.log('Binance: Candle backfill error: ' + JSON.stringify(body))
+          reject()
+          return
+        }
+
+        resolve(body.map(candle => {
+          return new Candlestick(
+            moment(candle[0]).format('X'), // Open time
+            candle[1], // Open
+            candle[2], // High
+            candle[3], // Low
+            candle[4], // Close
+            candle[5], // Volume
+          )
+        }))
+      })
+    })
   }
 
   async order(order) {
@@ -628,5 +667,9 @@ module.exports = class Binance {
 
   isInverseSymbol(symbol) {
     return false;
+  }
+
+  getBaseUrl() {
+    return 'https://api.binance.com'
   }
 };
